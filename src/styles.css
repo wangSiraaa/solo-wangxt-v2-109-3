@@ -511,6 +511,223 @@ input[type='range'] {
   color: var(--muted);
 }
 
+/* ---------- 素材换版 / 来源链 ---------- */
+.version-chain {
+  border-top: 1px dashed var(--border);
+  margin-top: 2px;
+  padding-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.vc-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+}
+.vc-current {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(78, 205, 196, 0.08);
+  border: 1px solid rgba(78, 205, 196, 0.3);
+  border-radius: 6px;
+  padding: 5px 6px;
+}
+.vc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 6px;
+  background: #0d1118;
+}
+.vc-item.failed {
+  border-color: rgba(248, 113, 113, 0.45);
+  background: rgba(248, 113, 113, 0.07);
+}
+.vc-item.history {
+  background: rgba(167, 139, 250, 0.06);
+}
+.vc-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.vc-version {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 11px;
+}
+.vc-version b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+.vc-meta {
+  font-size: 10px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.vc-meta.err {
+  color: var(--danger);
+}
+.vc-meta.ok {
+  color: #34d399;
+}
+.vc-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 2px 5px;
+  line-height: 1.4;
+  text-transform: none;
+}
+.vc-badge.current {
+  background: rgba(78, 205, 196, 0.25);
+  color: #4ecdc4;
+}
+.vc-badge.pending {
+  background: rgba(96, 165, 250, 0.22);
+  color: #60a5fa;
+}
+.vc-badge.failed {
+  background: rgba(248, 113, 113, 0.22);
+  color: #f87171;
+}
+.vc-badge.history {
+  background: rgba(167, 139, 250, 0.22);
+  color: #a78bfa;
+}
+.vc-notice {
+  font-size: 11px;
+  border-radius: 5px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vc-notice.vc-ok {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+}
+.vc-notice.vc-dup {
+  background: rgba(255, 224, 102, 0.12);
+  color: #ffe066;
+}
+.vc-notice.vc-err {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+}
+.vc-resolve {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vc-field.warn {
+  border: 1px solid rgba(255, 224, 102, 0.4);
+  background: rgba(255, 224, 102, 0.06);
+  border-radius: 5px;
+  padding: 5px 6px;
+  font-size: 10px;
+  color: #ffe066;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vc-ch-buttons,
+.vc-pos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.vc-pos label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text);
+  font-size: 11px;
+}
+.vc-explicit input[type='number'] {
+  width: 64px;
+  background: #0d1118;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.vc-actions {
+  width: 100%;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.vc-subhead {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.vc-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.vc-log {
+  font-size: 10px;
+  color: var(--muted);
+}
+.vc-log summary {
+  cursor: pointer;
+  user-select: none;
+}
+.vc-log ol {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.vc-log li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.vc-log li.rollback b {
+  color: #a78bfa;
+}
+.vc-kind {
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 4px;
+}
+.vc-kind.swap {
+  background: rgba(96, 165, 250, 0.22);
+  color: #60a5fa;
+}
+.vc-kind.rollback {
+  background: rgba(167, 139, 250, 0.22);
+  color: #a78bfa;
+}
+
 /* ---------- Right panels ---------- */
 .panel {
   background: var(--panel);

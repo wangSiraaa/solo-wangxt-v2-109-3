@@ -11,6 +11,8 @@ import {
 } from '../lib/spatial';
 import type { ListenerState, SpatialSettings } from '../types';
 import type { WorkbenchApi } from '../state/useWorkbench';
+import { VersionChain } from './VersionChain';
+import { getCurrentVersion } from '../lib/versioning';
 
 interface Props {
   track: Track;
@@ -57,9 +59,12 @@ export function TrackRow({ track, api }: Props) {
     spatial.maxDistance,
   );
 
+  const currentVersion = getCurrentVersion(track);
   const statusText =
     track.status === 'decode-error'
-      ? '解码失败'
+      ? currentVersion
+        ? '解码失败'
+        : '无可用版本'
       : track.status === 'loading'
         ? '解码中…'
         : track.status === 'pending'
@@ -94,7 +99,7 @@ export function TrackRow({ track, api }: Props) {
         <button
           className="btn small"
           onClick={() => api.togglePlay(track.id)}
-          disabled={track.status === 'decode-error'}
+          disabled={track.status === 'decode-error' || (track.sourceType === 'file' && !currentVersion)}
           title={playing ? '暂停' : '播放'}
         >
           {playing ? '⏸' : '▶'}
@@ -163,10 +168,10 @@ export function TrackRow({ track, api }: Props) {
         </span>
       </div>
 
-      {track.channels && track.channels > 1 ? (
+      {currentVersion && currentVersion.channels && currentVersion.channels > 1 ? (
         <div className="track-channel">
           输入声道：
-          {Array.from({ length: track.channels }).map((_, i) => (
+          {Array.from({ length: currentVersion.channels }).map((_, i) => (
             <button
               key={i}
               className={`btn mini ${track.channel === i ? 'active' : ''}`}
@@ -178,6 +183,8 @@ export function TrackRow({ track, api }: Props) {
           ))}
         </div>
       ) : null}
+
+      {track.sourceType === 'file' && <VersionChain track={track} api={api} />}
     </div>
   );
 }

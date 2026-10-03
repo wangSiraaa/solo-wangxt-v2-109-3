@@ -34,6 +34,9 @@ interface TrackVoice {
   source: AudioBufferSourceNode;
   trackGain: GainNode;
   panner: PannerNode;
+  /** file 声轨当前挂载的素材版本 id（内置样例为 undefined） */
+  versionId?: string;
+  buffer: AudioBuffer;
   /** true = 接在 soloBus（可听见）；false = 接在增益为 0 的 muteBus */
   audiblyRouted: boolean;
   playing: boolean;
@@ -318,11 +321,22 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   /**
    * 确保声轨缓冲与节点就绪。
    * 已存在的 voice 只做实时参数更新（位置/增益/路由/loop），绝不重启源。
+   *
+   * 缓冲键约定：
+   *  - 内置样例：trackId
+   *  - file 声轨当前版本：`file::<trackId>::<versionId>`
+   *  - file 声轨待校验候选：`cand::<trackId>::<versionId>`（不接入任何节点）
    */
   async ensureTrack(track: Track): Promise<void> {
     if (!this.ctx || this.unlock !== 'unlocked') return;
 
-    let buffer = this.buffers.get(track.id);
+    const currentVersion = track.currentVersionId;
+    const bufferKey =
+      track.sourceType === 'file' && currentVersion
+        ? this.fileBufferKey(track.id, currentVersion)
+        : track.id;
+
+    let buffer = this.buffers.get(bufferKey);
     if (!buffer) {
       if (track.sourceType === 'file') {
         const blob = this.pendingFiles.get(track.id);
@@ -340,15 +354,152 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       } else {
         buffer = createSampleBuffer(this.ctx, track.sourceType);
       }
-      this.buffers.set(track.id, buffer);
+      this.buffers.set(bufferKey, buffer);
     }
 
     const existing = this.voices.get(track.id);
     if (!existing) {
-      this.voices.set(track.id, this.createVoice(track, buffer));
+      this.voices.set(track.id, this.createVoice(track, buffer, currentVersion));
     } else {
       this.updateVoiceLive(existing, track);
     }
+  }
+
+  private fileBufferKey(trackId: string, versionId: string): string {
+    return `file::${trackId}::${versionId}`;
+  }
+  private candidateBufferKey(trackId: string, versionId: string): string {
+    return `cand::${trackId}::${versionId}`;
+  }
+
+  /**
+   * 候选素材校验：仅在浏览器内解码并缓存结果，返回声道/时长元信息。
+   * 绝不触碰该轨当前 voice，因此播放中提交候选不会产生第二个 source、
+   * 也不会改变当前试听内容（验收④）。失败时清理缓存并抛 DecodeError，旧素材继续可播。
+   */
+  async probeCandidate(
+    trackId: string,
+    versionId: string,
+    blob: Blob,
+  ): Promise<{ channels: number; duration: number; sampleRate: number }> {
+    if (!this.ctx || this.unlock !== 'unlocked') {
+      throw new Error('音频尚未解锁，无法在浏览器内校验候选素材');
+    }
+    const key = this.candidateBufferKey(trackId, versionId);
+    const cached = this.buffers.get(key);
+    if (cached) {
+      return {
+        channels: cached.numberOfChannels,
+        duration: cached.duration,
+        sampleRate: cached.sampleRate,
+      };
+    }
+    let buffer: AudioBuffer;
+    try {
+      const arr = await blob.arrayBuffer();
+      buffer = await this.ctx.decodeAudioData(arr.slice(0));
+    } catch (err) {
+      this.buffers.delete(key);
+      throw new DecodeError(
+        trackId,
+        `候选素材解码失败：${err instanceof Error ? err.message : '不支持的编码或文件损坏'}`,
+      );
+    }
+    if (!buffer.numberOfChannels || !(buffer.duration > 0)) {
+      this.buffers.delete(key);
+      throw new DecodeError(trackId, '候选素材解码结果无效（声道数或时长为 0）');
+    }
+    this.buffers.set(key, buffer);
+    return {
+      channels: buffer.numberOfChannels,
+      duration: buffer.duration,
+      sampleRate: buffer.sampleRate,
+    };
+  }
+
+  /** 放弃候选（解码失败或用户丢弃）：清掉候选解码缓存，不影响当前素材 */
+  dropCandidate(trackId: string, versionId: string) {
+    this.buffers.delete(this.candidateBufferKey(trackId, versionId));
+  }
+
+  /** 候选是否已通过浏览器解码且缓存仍在（UI 据此决定切换前要不要重新注入 Blob） */
+  hasCandidateBuffer(trackId: string, versionId: string): boolean {
+    return this.buffers.has(this.candidateBufferKey(trackId, versionId));
+  }
+
+  /**
+   * 原子切换声轨素材版本（用户已确认）。
+   * 目标版本缓冲优先来自候选校验缓存（不重复解码）；其次用 pendingFiles 中
+   * 由 UI 注入的 Blob（回退到历史版本的场景）。
+   *
+   * 保持该轨全部图参数与播放态：空间摆位/增益/M/S/loop 来自 newTrack spec；
+   * 正在播放 → 从 startOffsetSec 起播且仅此一个 source（旧 source 立即停掉），
+   * 不暂停/重置其他轨，也不动全局播放（验收①④）。
+   */
+  async activateTrackVersion(
+    newTrack: Track,
+    startOffsetSec: number,
+  ): Promise<{ channels: number; duration: number; sampleRate: number }> {
+    if (!this.ctx || this.unlock !== 'unlocked') {
+      throw new Error('音频尚未解锁，无法切换素材版本');
+    }
+    const versionId = newTrack.currentVersionId;
+    if (!versionId) throw new DecodeError(newTrack.id, '缺少素材版本信息');
+
+    const targetKey = this.fileBufferKey(newTrack.id, versionId);
+    let buffer = this.buffers.get(targetKey);
+    if (!buffer) {
+      const candKey = this.candidateBufferKey(newTrack.id, versionId);
+      buffer = this.buffers.get(candKey);
+      if (buffer) {
+        this.buffers.set(targetKey, buffer);
+        this.buffers.delete(candKey);
+      }
+    }
+    if (!buffer) {
+      const blob = this.pendingFiles.get(newTrack.id);
+      if (!blob) throw new DecodeError(newTrack.id, '本地素材 Blob 缺失，无法切换');
+      try {
+        buffer = await this.ctx.decodeAudioData((await blob.arrayBuffer()).slice(0));
+      } catch (err) {
+        // 解码失败：旧 voice 原样保留，当前试听不变
+        throw new DecodeError(
+          newTrack.id,
+          `素材版本切换失败：${err instanceof Error ? err.message : '不支持的编码或文件损坏'}`,
+        );
+      }
+      this.buffers.set(targetKey, buffer);
+    }
+
+    const old = this.voices.get(newTrack.id);
+    const wasPlaying = old?.playing ?? false;
+    const offset = Math.min(Math.max(0, startOffsetSec), buffer.duration);
+    if (old) {
+      const nv = this.replaceVoice(old, newTrack, buffer, offset, versionId);
+      if (wasPlaying) {
+        nv.source.start(this.ctx.currentTime, offset);
+        nv.startedAt = this.ctx.currentTime;
+        nv.playing = true;
+        nv.consumed = true;
+      }
+    } else {
+      const nv = this.createVoice(newTrack, buffer, versionId);
+      nv.offset = offset;
+      this.voices.set(newTrack.id, nv);
+    }
+    // 清掉该轨其他候选缓存，避免堆积
+    const prefix = `cand::${newTrack.id}::`;
+    for (const key of [...this.buffers.keys()]) {
+      if (key.startsWith(prefix) && key !== this.candidateBufferKey(newTrack.id, versionId)) {
+        this.buffers.delete(key);
+      }
+    }
+
+    return {
+      channels: buffer.numberOfChannels,
+      duration: buffer.duration,
+      sampleRate: buffer.sampleRate,
+    };
   }
 
   /** 文件 Blob 在解锁后由 UI 层提供（来自 IndexedDB，全程本地） */
@@ -358,9 +509,14 @@ registerProcessor('peak-meter', PeakMeterProcessor);
 
   dropBuffer(trackId: string) {
     this.buffers.delete(trackId);
+    for (const key of [...this.buffers.keys()]) {
+      if (key.startsWith(`file::${trackId}::`) || key.startsWith(`cand::${trackId}::`)) {
+        this.buffers.delete(key);
+      }
+    }
   }
 
-  private createVoice(track: Track, buffer: AudioBuffer): TrackVoice {
+  private createVoice(track: Track, buffer: AudioBuffer, versionId?: string): TrackVoice {
     const ctx = this.ctx!;
     const source = ctx.createBufferSource();
     source.buffer = buffer;
@@ -401,6 +557,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       source,
       trackGain,
       panner,
+      versionId,
+      buffer,
       audiblyRouted: audible,
       playing: false,
       consumed: false,
@@ -416,7 +574,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       voice.consumed = true;
       voice.offset = 0;
       // 以最新参数立即重建待播 voice，保证自然结束后再次按播放不会对已结束 source start
-      const fresh = this.createVoice(latest, buffer);
+      const fresh = this.createVoice(latest, voice.buffer, voice.versionId);
       fresh.offset = 0;
       this.voices.set(track.id, fresh);
       this.endedListeners.forEach((fn) => fn(track.id));
@@ -486,6 +644,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   }
 
   getChannelCount(trackId: string): number | null {
+    const v = this.voices.get(trackId);
+    if (v) return v.buffer.numberOfChannels;
     return this.buffers.get(trackId)?.numberOfChannels ?? null;
   }
 
@@ -496,8 +656,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   async rebuildVoiceGraph(track: Track): Promise<void> {
     await this.ensureTrack(track);
     const old = this.voices.get(track.id);
-    const buf = this.buffers.get(track.id);
-    if (!old || !buf) return;
+    if (!old) return;
+    const buf = old.buffer;
     const wasPlaying = old.playing;
     const offset = wasPlaying ? this.currentOffset(old) : old.offset;
     const nv = this.replaceVoice(old, track, buf, offset);
@@ -518,8 +678,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
     if (voice.playing) return;
     if (voice.consumed) {
       // 自然结束后未被 onended 重建的兜底
-      const buf = this.buffers.get(track.id)!;
-      voice = this.replaceVoice(voice, track, buf, voice.offset);
+      voice = this.replaceVoice(voice, track, voice.buffer, voice.offset);
     }
     const ctx = this.ctx!;
     voice.source.start(ctx.currentTime, voice.offset % voice.duration);
@@ -532,14 +691,14 @@ registerProcessor('peak-meter', PeakMeterProcessor);
     const voice = this.voices.get(track.id);
     if (!voice || !voice.playing) return;
     voice.offset = this.currentOffset(voice);
-    this.replaceVoice(voice, track, this.buffers.get(track.id)!, voice.offset);
+    this.replaceVoice(voice, track, voice.buffer, voice.offset);
   }
 
   stopTrack(track: Track) {
     const voice = this.voices.get(track.id);
     if (!voice) return;
     if (voice.playing || voice.consumed) {
-      this.replaceVoice(voice, track, this.buffers.get(track.id)!, 0);
+      this.replaceVoice(voice, track, voice.buffer, 0);
     } else {
       voice.offset = 0;
     }
@@ -549,8 +708,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   async seekTrack(track: Track, offsetSec: number, autoplay: boolean) {
     await this.ensureTrack(track);
     const voice = this.voices.get(track.id);
-    const buf = this.buffers.get(track.id);
-    if (!voice || !buf) return;
+    if (!voice) return;
+    const buf = voice.buffer;
     const offset = track.loop
       ? ((offsetSec % buf.duration) + buf.duration) % buf.duration
       : Math.min(Math.max(0, offsetSec), buf.duration);
@@ -572,6 +731,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
     track: Track,
     buffer: AudioBuffer,
     offset: number,
+    versionId?: string,
   ): TrackVoice {
     try {
       old.source.onended = null;
@@ -582,7 +742,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
     old.source.disconnect();
     old.trackGain.disconnect();
     old.panner.disconnect();
-    const nv = this.createVoice(track, buffer);
+    const nv = this.createVoice(track, buffer, versionId ?? old.versionId);
     nv.offset = offset;
     this.voices.set(track.id, nv);
     return nv;
@@ -608,7 +768,16 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       voice.panner.disconnect();
     }
     this.voices.delete(trackId);
-    this.buffers.delete(trackId);
+    // 该轨的当前版本缓冲、全部候选缓冲、内置样例缓冲一并清除
+    for (const key of [...this.buffers.keys()]) {
+      if (
+        key === trackId ||
+        key.startsWith(`file::${trackId}::`) ||
+        key.startsWith(`cand::${trackId}::`)
+      ) {
+        this.buffers.delete(key);
+      }
+    }
     this.pendingFiles.delete(trackId);
   }
 
@@ -619,6 +788,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   }
 
   getDuration(trackId: string): number | null {
+    const v = this.voices.get(trackId);
+    if (v) return v.buffer.duration;
     return this.buffers.get(trackId)?.duration ?? null;
   }
 

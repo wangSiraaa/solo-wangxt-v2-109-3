@@ -23,14 +23,6 @@ var init_spatial = __esm({
 });
 
 // src/lib/samples.ts
-var samples_exports = {};
-__export(samples_exports, {
-  SAMPLE_LABELS: () => SAMPLE_LABELS,
-  createDuoBuffer: () => createDuoBuffer,
-  createPulseBuffer: () => createPulseBuffer,
-  createSampleBuffer: () => createSampleBuffer,
-  createToneBuffer: () => createToneBuffer
-});
 function mulberry32(seed) {
   let a = seed >>> 0;
   return () => {
@@ -101,16 +93,9 @@ function createSampleBuffer(ctx, type) {
       throw new Error(`\u975E\u5185\u7F6E\u6837\u4F8B\u7C7B\u578B: ${type}`);
   }
 }
-var SAMPLE_LABELS;
 var init_samples = __esm({
   "src/lib/samples.ts"() {
     "use strict";
-    SAMPLE_LABELS = {
-      pulse: "\u8109\u51B2\u6837\u4F8B\uFF08\u65B9\u4F4D\u6D4B\u8BD5\uFF09",
-      tone: "\u5355\u97F3\u6837\u4F8B\uFF08\u58F0\u50CF/\u8DDD\u79BB\uFF09",
-      duoA: "\u53CC\u58F0\u6E90 A\uFF08\u540C\u6B65\u5DE6\uFF09",
-      duoB: "\u53CC\u58F0\u6E90 B\uFF08\u540C\u6B65\u53F3\uFF09"
-    };
   }
 });
 
@@ -272,8 +257,8 @@ class PeakMeterProcessor extends AudioWorkletProcessor {
 }
 registerProcessor('peak-meter', PeakMeterProcessor);
 `;
-          const blob = new Blob([workletSource], { type: "application/javascript" });
-          const url = URL.createObjectURL(blob);
+          const blob2 = new Blob([workletSource], { type: "application/javascript" });
+          const url = URL.createObjectURL(blob2);
           try {
             await ctx.audioWorklet.addModule(url);
           } finally {
@@ -393,10 +378,10 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         let buffer = this.buffers.get(bufferKey);
         if (!buffer) {
           if (track.sourceType === "file") {
-            const blob = this.pendingFiles.get(track.id);
-            if (!blob) return;
+            const blob2 = this.pendingFiles.get(track.id);
+            if (!blob2) return;
             try {
-              const arr = await blob.arrayBuffer();
+              const arr = await blob2.arrayBuffer();
               buffer = await this.ctx.decodeAudioData(arr.slice(0));
             } catch (err) {
               throw new DecodeError(
@@ -427,7 +412,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
        * 绝不触碰该轨当前 voice，因此播放中提交候选不会产生第二个 source、
        * 也不会改变当前试听内容（验收④）。失败时清理缓存并抛 DecodeError，旧素材继续可播。
        */
-      async probeCandidate(trackId, versionId, blob) {
+      async probeCandidate(trackId, versionId, blob2) {
         if (!this.ctx || this.unlock !== "unlocked") {
           throw new Error("\u97F3\u9891\u5C1A\u672A\u89E3\u9501\uFF0C\u65E0\u6CD5\u5728\u6D4F\u89C8\u5668\u5185\u6821\u9A8C\u5019\u9009\u7D20\u6750");
         }
@@ -442,7 +427,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         }
         let buffer;
         try {
-          const arr = await blob.arrayBuffer();
+          const arr = await blob2.arrayBuffer();
           buffer = await this.ctx.decodeAudioData(arr.slice(0));
         } catch (err) {
           this.buffers.delete(key);
@@ -496,10 +481,10 @@ registerProcessor('peak-meter', PeakMeterProcessor);
           }
         }
         if (!buffer) {
-          const blob = this.pendingFiles.get(newTrack.id);
-          if (!blob) throw new DecodeError(newTrack.id, "\u672C\u5730\u7D20\u6750 Blob \u7F3A\u5931\uFF0C\u65E0\u6CD5\u5207\u6362");
+          const blob2 = this.pendingFiles.get(newTrack.id);
+          if (!blob2) throw new DecodeError(newTrack.id, "\u672C\u5730\u7D20\u6750 Blob \u7F3A\u5931\uFF0C\u65E0\u6CD5\u5207\u6362");
           try {
-            buffer = await this.ctx.decodeAudioData((await blob.arrayBuffer()).slice(0));
+            buffer = await this.ctx.decodeAudioData((await blob2.arrayBuffer()).slice(0));
           } catch (err) {
             throw new DecodeError(
               newTrack.id,
@@ -537,8 +522,8 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         };
       }
       /** 文件 Blob 在解锁后由 UI 层提供（来自 IndexedDB，全程本地） */
-      setFileBlob(trackId, blob) {
-        this.pendingFiles.set(trackId, blob);
+      setFileBlob(trackId, blob2) {
+        this.pendingFiles.set(trackId, blob2);
       }
       dropBuffer(trackId) {
         this.buffers.delete(trackId);
@@ -576,7 +561,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         trackGain.connect(panner);
         const audible = this.shouldBeAudible(track);
         panner.connect(audible ? this.soloBus : this.muteBus);
-        const voice = {
+        const voice2 = {
           trackId: track.id,
           spec: track,
           source,
@@ -592,17 +577,17 @@ registerProcessor('peak-meter', PeakMeterProcessor);
           duration: buffer.duration
         };
         source.onended = () => {
-          if (!voice.playing) return;
-          const latest = voice.spec;
-          voice.playing = false;
-          voice.consumed = true;
-          voice.offset = 0;
-          const fresh = this.createVoice(latest, voice.buffer, voice.versionId);
+          if (!voice2.playing) return;
+          const latest = voice2.spec;
+          voice2.playing = false;
+          voice2.consumed = true;
+          voice2.offset = 0;
+          const fresh = this.createVoice(latest, voice2.buffer, voice2.versionId);
           fresh.offset = 0;
           this.voices.set(track.id, fresh);
           this.endedListeners.forEach((fn) => fn(track.id));
         };
-        return voice;
+        return voice2;
       }
       shouldBeAudible(track) {
         if (track.muted) return false;
@@ -610,23 +595,23 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         return true;
       }
       /** 实时参数更新：不触碰 source 节点 —— 移动声源不会重启音轨 */
-      updateVoiceLive(voice, track) {
+      updateVoiceLive(voice2, track) {
         const ctx = this.ctx;
         const t = ctx.currentTime;
         const tau = Math.max(5e-3, this.spatial?.positionTimeConstant ?? 0.05);
-        voice.panner.positionX.setTargetAtTime(track.position.x, t, tau);
-        voice.panner.positionY.setTargetAtTime(track.position.y, t, tau);
-        voice.panner.positionZ.setTargetAtTime(track.position.z, t, tau);
-        voice.panner.distanceModel = this.spatial?.distanceModel ?? voice.panner.distanceModel;
-        voice.trackGain.gain.setTargetAtTime(track.muted ? 0 : track.gain, t, 0.01);
-        if (voice.source.loop !== track.loop) voice.source.loop = track.loop;
+        voice2.panner.positionX.setTargetAtTime(track.position.x, t, tau);
+        voice2.panner.positionY.setTargetAtTime(track.position.y, t, tau);
+        voice2.panner.positionZ.setTargetAtTime(track.position.z, t, tau);
+        voice2.panner.distanceModel = this.spatial?.distanceModel ?? voice2.panner.distanceModel;
+        voice2.trackGain.gain.setTargetAtTime(track.muted ? 0 : track.gain, t, 0.01);
+        if (voice2.source.loop !== track.loop) voice2.source.loop = track.loop;
         const audible = this.shouldBeAudible(track);
-        if (audible !== voice.audiblyRouted) {
-          voice.panner.disconnect();
-          voice.panner.connect(audible ? this.soloBus : this.muteBus);
-          voice.audiblyRouted = audible;
+        if (audible !== voice2.audiblyRouted) {
+          voice2.panner.disconnect();
+          voice2.panner.connect(audible ? this.soloBus : this.muteBus);
+          voice2.audiblyRouted = audible;
         }
-        voice.spec = track;
+        voice2.spec = track;
       }
       /** 静音/独奏变化：重新评估全部路由（增益本身在 updateVoiceLive 中已设置） */
       reevaluateRouting(tracks) {
@@ -685,41 +670,41 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       // ---------- 传输控制 ----------
       async playTrack(track) {
         await this.ensureTrack(track);
-        let voice = this.voices.get(track.id);
-        if (!voice) return;
-        if (voice.playing) return;
-        if (voice.consumed) {
-          voice = this.replaceVoice(voice, track, voice.buffer, voice.offset);
+        let voice2 = this.voices.get(track.id);
+        if (!voice2) return;
+        if (voice2.playing) return;
+        if (voice2.consumed) {
+          voice2 = this.replaceVoice(voice2, track, voice2.buffer, voice2.offset);
         }
         const ctx = this.ctx;
-        voice.source.start(ctx.currentTime, voice.offset % voice.duration);
-        voice.startedAt = ctx.currentTime;
-        voice.playing = true;
-        voice.consumed = true;
+        voice2.source.start(ctx.currentTime, voice2.offset % voice2.duration);
+        voice2.startedAt = ctx.currentTime;
+        voice2.playing = true;
+        voice2.consumed = true;
       }
       pauseTrack(track) {
-        const voice = this.voices.get(track.id);
-        if (!voice || !voice.playing) return;
-        voice.offset = this.currentOffset(voice);
-        this.replaceVoice(voice, track, voice.buffer, voice.offset);
+        const voice2 = this.voices.get(track.id);
+        if (!voice2 || !voice2.playing) return;
+        voice2.offset = this.currentOffset(voice2);
+        this.replaceVoice(voice2, track, voice2.buffer, voice2.offset);
       }
       stopTrack(track) {
-        const voice = this.voices.get(track.id);
-        if (!voice) return;
-        if (voice.playing || voice.consumed) {
-          this.replaceVoice(voice, track, voice.buffer, 0);
+        const voice2 = this.voices.get(track.id);
+        if (!voice2) return;
+        if (voice2.playing || voice2.consumed) {
+          this.replaceVoice(voice2, track, voice2.buffer, 0);
         } else {
-          voice.offset = 0;
+          voice2.offset = 0;
         }
       }
       /** 跳转：offsetSec 秒处；autoplay=true 时立即继续播放 */
       async seekTrack(track, offsetSec, autoplay) {
         await this.ensureTrack(track);
-        const voice = this.voices.get(track.id);
-        if (!voice) return;
-        const buf = voice.buffer;
+        const voice2 = this.voices.get(track.id);
+        if (!voice2) return;
+        const buf = voice2.buffer;
         const offset = track.loop ? (offsetSec % buf.duration + buf.duration) % buf.duration : Math.min(Math.max(0, offsetSec), buf.duration);
-        const nv = this.replaceVoice(voice, track, buf, offset);
+        const nv = this.replaceVoice(voice2, track, buf, offset);
         if (autoplay) {
           nv.source.start(this.ctx.currentTime, offset);
           nv.startedAt = this.ctx.currentTime;
@@ -751,16 +736,16 @@ registerProcessor('peak-meter', PeakMeterProcessor);
         return p;
       }
       removeTrack(trackId) {
-        const voice = this.voices.get(trackId);
-        if (voice) {
+        const voice2 = this.voices.get(trackId);
+        if (voice2) {
           try {
-            voice.source.onended = null;
-            voice.source.stop();
+            voice2.source.onended = null;
+            voice2.source.stop();
           } catch {
           }
-          voice.source.disconnect();
-          voice.trackGain.disconnect();
-          voice.panner.disconnect();
+          voice2.source.disconnect();
+          voice2.trackGain.disconnect();
+          voice2.panner.disconnect();
         }
         this.voices.delete(trackId);
         for (const key of [...this.buffers.keys()]) {
@@ -794,7 +779,7 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   }
 });
 
-// test/engine.test.ts
+// test/swapEngine.test.ts
 import assert from "node:assert/strict";
 import { describe, it, beforeEach, afterEach } from "node:test";
 var FakeAudioParam = class {
@@ -814,11 +799,9 @@ var FakeAudioParam = class {
 var FakeNode = class {
   connects = [];
   disconnected = false;
-  connectedFrom = [];
   connect(node, out, inp) {
     const target = node.input ?? node;
     this.connects.push({ node: target, out, inp });
-    target.connectedFrom.push(this);
     return target;
   }
   disconnect() {
@@ -829,8 +812,6 @@ var FakeNode = class {
 var FakeGain = class extends FakeNode {
   gain = new FakeAudioParam(1);
 };
-var FakeStereoPanner = class extends FakeNode {
-};
 var FakeDestination = class extends FakeNode {
 };
 var FakePanner = class extends FakeNode {
@@ -839,17 +820,15 @@ var FakePanner = class extends FakeNode {
   refDistance = 1;
   rolloffFactor = 1;
   maxDistance = 100;
-  positionX = new FakeAudioParam(0);
-  positionY = new FakeAudioParam(0);
-  positionZ = new FakeAudioParam(0);
-  positionTimeConstant = 0;
-  orientationX = new FakeAudioParam(1);
+  positionX;
+  positionY;
+  positionZ;
   constructor(_ctx, opts = {}) {
     super();
     Object.assign(this, opts);
-    if (opts.positionX !== void 0) this.positionX = new FakeAudioParam(opts.positionX);
-    if (opts.positionY !== void 0) this.positionY = new FakeAudioParam(opts.positionY);
-    if (opts.positionZ !== void 0) this.positionZ = new FakeAudioParam(opts.positionZ);
+    this.positionX = new FakeAudioParam(opts.positionX ?? 0);
+    this.positionY = new FakeAudioParam(opts.positionY ?? 0);
+    this.positionZ = new FakeAudioParam(opts.positionZ ?? 0);
   }
 };
 var FakeBufferSource = class extends FakeNode {
@@ -870,16 +849,14 @@ var FakeBuffer = class {
   numberOfChannels;
   length;
   sampleRate;
-  data;
   constructor(ch, length, sr, duration) {
     this.numberOfChannels = ch;
     this.length = length;
     this.sampleRate = sr;
     this.duration = duration;
-    this.data = Array.from({ length: ch }, () => new Float32Array(length));
   }
-  getChannelData(i) {
-    return this.data[i];
+  getChannelData() {
+    return new Float32Array(this.length);
   }
 };
 var FakeSplitter = class extends FakeNode {
@@ -888,7 +865,11 @@ var FakeSplitter = class extends FakeNode {
     this.channels = channels;
   }
 };
-var FakeMerger = class extends FakeNode {
+var FakeAnalyser = class extends FakeNode {
+  fftSize = 2048;
+  getFloatTimeDomainData(arr) {
+    arr.fill(0);
+  }
 };
 var FakeListener = class {
   positionX = new FakeAudioParam(0);
@@ -901,24 +882,14 @@ var FakeListener = class {
   upY = new FakeAudioParam(1);
   upZ = new FakeAudioParam(0);
 };
-var FakeAnalyser = class extends FakeNode {
-  fftSize = 2048;
-  getFloatTimeDomainData(arr) {
-    arr.fill(0);
-  }
-};
 var FakeAudioContext = class {
   state = "running";
-  currentTime = 0;
-  playbackRate = { value: 1 };
+  currentTime = 10;
   destination = new FakeDestination();
   listener = new FakeListener();
   sampleRate = 48e3;
-  audioWorklet = {
-    addModule: async () => {
-      throw new Error("worklet unavailable in test");
-    }
-  };
+  audioWorklet = { addModule: async () => {
+  } };
   createGain() {
     return new FakeGain();
   }
@@ -931,14 +902,8 @@ var FakeAudioContext = class {
   createChannelSplitter(ch) {
     return new FakeSplitter(ch);
   }
-  createChannelMerger(ch) {
-    return new FakeMerger();
-  }
   createAnalyser() {
     return new FakeAnalyser();
-  }
-  createStereoPanner() {
-    return new FakeStereoPanner();
   }
   async resume() {
     this.state = "running";
@@ -946,164 +911,199 @@ var FakeAudioContext = class {
   async decodeAudioData(buf) {
     const text = new TextDecoder().decode(buf);
     if (text === "BAD") throw new Error("EncodingError: fake bad file");
-    return new FakeBuffer(1, 48e3, 48e3, 1);
+    let ch = 1;
+    let dur = 1;
+    if (text.includes(":")) {
+      const [a, b] = text.split(":");
+      ch = Number(a) || 1;
+      dur = Number(b) || 1;
+    }
+    return new FakeBuffer(ch, Math.floor(48e3 * dur), 48e3, dur);
   }
   async close() {
   }
 };
 var g = globalThis;
 g.AudioContext = FakeAudioContext;
-g.requestAnimationFrame = (fn) => {
-  return setTimeout(() => fn(0), 16);
-};
+g.requestAnimationFrame = (fn) => setTimeout(() => fn(0), 16);
 g.cancelAnimationFrame = (id) => clearTimeout(id);
 g.window = globalThis;
 g.PannerNode = FakePanner;
 var { AudioEngine: AudioEngine2, DecodeError: DecodeError2 } = await Promise.resolve().then(() => (init_audioEngine(), audioEngine_exports));
-var { createSampleBuffer: createSampleBuffer2 } = await Promise.resolve().then(() => (init_samples(), samples_exports));
-function baseTrack(over = {}) {
+function blob(text) {
+  return new Blob([new TextEncoder().encode(text)], { type: "audio/x" });
+}
+function fileTrack(id, versionId, over = {}) {
   return {
-    id: "t1",
-    name: "T",
-    sourceType: "tone",
+    id,
+    name: id,
+    sourceType: "file",
+    blobKey: `blob-${versionId}`,
+    originalFileName: `${versionId}.wav`,
+    versions: [],
+    currentVersionId: versionId,
     loop: false,
     muted: false,
     solo: false,
     gain: 0.8,
     channel: 0,
+    channels: 1,
     color: "#fff",
     position: { x: 2, y: 0, z: 0 },
     status: "pending",
+    duration: 1,
     ...over
   };
 }
-describe("AudioEngine \u56FE\u884C\u4E3A\uFF08\u6A21\u62DF\u73AF\u5883\uFF09", () => {
+function voice(engine, id) {
+  return engine.voices.get(id);
+}
+function bufferCount(engine) {
+  return engine.buffers.size;
+}
+describe("AudioEngine \u7D20\u6750\u6362\u7248\uFF08\u6A21\u62DF\u73AF\u5883\uFF09", () => {
   let engine;
-  beforeEach(() => {
+  beforeEach(async () => {
     engine = new AudioEngine2();
-  });
-  afterEach(() => {
-    engine.dispose();
-  });
-  it("resume \u89E3\u9501\uFF1BsetListener \u5199\u5165\u4E0E\u7A7A\u95F4\u6570\u5B66\u4E00\u81F4\u7684\u671D\u5411", async () => {
     await engine.resume();
-    assert.equal(engine.unlock, "unlocked");
-    engine.setListener({
-      position: { x: 0, y: 0, z: 3 },
-      yaw: Math.PI / 2,
-      // 右转 → forward (+1,0,0)
-      pitch: 0,
-      earHeight: 0
-    });
-    const li = engine.ctx.listener;
-    assert.ok(Math.abs(li.forwardX.value - 1) < 1e-6);
-    assert.ok(Math.abs(li.forwardZ.value) < 1e-6);
-    assert.ok(Math.abs(li.upY.value - 1) < 1e-6);
-    assert.ok(Math.abs(li.positionZ.value - 3) < 1e-6);
   });
-  it("\u58F0\u8F68\u94FE\u8DEF\u4E3A source\u2192trackGain\u2192HRTF panner\u2192soloBus\u2192\u2026\u2192destination\uFF1B\u8DDD\u79BB\u6A21\u578B\u53C2\u6570\u4E0B\u53D1", async () => {
-    await engine.resume();
-    engine.setSpatialSettings({
-      distanceModel: "exponential",
-      refDistance: 2,
-      rolloffFactor: 1.5,
-      maxDistance: 25,
-      positionTimeConstant: 0.05,
-      hrtfIR: "none"
-    });
-    const track = baseTrack();
-    await engine.ensureTrack(track);
-    const voices = engine.voices;
-    const v = voices.get("t1");
-    assert.equal(v.panner.panningModel, "HRTF");
-    assert.equal(v.panner.distanceModel, "exponential");
-    assert.equal(v.panner.refDistance, 2);
-    assert.equal(v.panner.rolloffFactor, 1.5);
-    assert.equal(v.panner.maxDistance, 25);
-    assert.ok(Math.abs(v.panner.positionX.value - 2) < 1e-9);
-    assert.ok(v.source.connects.some((c) => c.node === v.trackGain));
-    assert.ok(v.trackGain.connects.some((c) => c.node === v.panner));
-    const soloBus = engine.soloBus;
-    assert.ok(v.panner.connects.some((c) => c.node === soloBus));
+  afterEach(() => engine.dispose());
+  it("probeCandidate \u53EA\u89E3\u7801\u5019\u9009\u3001\u7F13\u5B58\u7ED3\u679C\uFF0C\u7EDD\u4E0D\u521B\u5EFA voice/source", async () => {
+    const t = fileTrack("a", "cur");
+    engine.setFileBlob("a", blob("1:1"));
+    await engine.ensureTrack(t);
+    await engine.playTrack(t);
+    const before = voice(engine, "a").source;
+    const startsBefore = before.started.length;
+    const meta = await engine.probeCandidate("a", "cand1", blob("2:5"));
+    assert.equal(meta.channels, 2);
+    assert.equal(meta.duration, 5);
+    assert.equal(meta.sampleRate, 48e3);
+    const after = voice(engine, "a");
+    assert.equal(after.source, before);
+    assert.equal(after.source.started.length, startsBefore);
+    assert.equal(after.source.stopped, 0);
+    assert.equal(engine.hasCandidateBuffer("a", "cand1"), true);
+    assert.equal(voice(engine, "a").panner.positionX.value, 2);
   });
-  it("\u9759\u97F3\u771F\u5B9E\u628A trackGain \u7F6E 0\uFF1B\u72EC\u594F\u628A\u975E\u72EC\u594F\u58F0\u8F68\u5207\u5230 muteBus", async () => {
-    await engine.resume();
-    const a = baseTrack({ id: "a" });
-    const b = baseTrack({ id: "b", position: { x: -2, y: 0, z: 0 } });
+  it("\u574F\u5019\u9009\u89E3\u7801\u5931\u8D25\u629B DecodeError \u4E14\u4E0D\u7559\u7F13\u5B58\uFF1B\u5F53\u524D\u7D20\u6750\u7EE7\u7EED\u53EF\u64AD\u653E\uFF0C\u5176\u4ED6\u8F68\u4E0D\u53D7\u5F71\u54CD", async () => {
+    const a = fileTrack("a", "cur", { position: { x: 3, y: 0, z: 0 } });
+    const b = fileTrack("b", "curb");
+    engine.setFileBlob("a", blob("1:1"));
+    engine.setFileBlob("b", blob("1:1"));
     await engine.ensureTrack(a);
     await engine.ensureTrack(b);
-    const voices = engine.voices;
-    const muteBus = engine.muteBus;
-    engine.syncTracks([{ ...a, muted: true }, b]);
-    assert.equal(voices.get("a").trackGain.gain.value, 0);
-    assert.equal(voices.get("b").trackGain.gain.value, 0.8);
-    engine.syncTracks([{ ...a, muted: true }, { ...b, solo: true }]);
-    assert.ok(voices.get("a").panner.connects.some((c) => c.node === muteBus));
-    assert.ok(
-      voices.get("b").panner.connects.every((c) => c.node !== muteBus)
+    await engine.playTrack(a);
+    await engine.playTrack(b);
+    await assert.rejects(
+      engine.probeCandidate("a", "bad", blob("BAD")),
+      (err) => err instanceof DecodeError2
     );
-    engine.syncTracks([{ ...a, muted: true }, b]);
-    assert.ok(voices.get("a").panner.connects.some((c) => c.node === muteBus));
-    assert.ok(
-      voices.get("a").panner.connects.every((c) => c.node === muteBus)
-    );
+    assert.equal(engine.hasCandidateBuffer("a", "bad"), false);
+    assert.equal(engine.isPlaying("a"), true);
+    assert.equal(engine.isPlaying("b"), true);
+    assert.equal(voice(engine, "a").source.buffer?.duration, 1);
+    assert.equal(voice(engine, "b").source.buffer?.numberOfChannels, 1);
+    const buffersBefore = bufferCount(engine);
+    assert.ok(buffersBefore >= 2);
   });
-  it("\u79FB\u52A8\u58F0\u6E90\u53EA\u5199 AudioParam\uFF0C\u7EDD\u4E0D stop/start source\uFF08\u4E0D\u91CD\u542F\u97F3\u8F68\uFF09", async () => {
-    await engine.resume();
-    const t = baseTrack();
+  it("\u64AD\u653E\u4E2D\u786E\u8BA4\u5207\u6362\uFF1A\u539F\u5B50\u66FF\u6362\u4E3A\u552F\u4E00\u65B0 source\uFF0C\u4ECE\u89E3\u6790\u504F\u79FB\u8D77\u64AD\uFF1B\u6446\u4F4D/\u589E\u76CA/M/S \u6CBF\u7528\u65B0 spec\uFF1B\u4E0D\u5F71\u54CD\u5168\u5C40\u5176\u4ED6\u8F68", async () => {
+    const t = fileTrack("a", "cur", { gain: 0.6, position: { x: -4, y: 1, z: 2 } });
+    const other = fileTrack("o", "curo", { position: { x: 5, y: 0, z: 0 } });
+    engine.setFileBlob("a", blob("1:1"));
+    engine.setFileBlob("o", blob("1:1"));
+    await engine.ensureTrack(t);
+    await engine.ensureTrack(other);
     await engine.playTrack(t);
-    const v = engine.voices.get("t1");
-    const startsBefore = v.source.started.length;
-    const stopsBefore = v.source.stopped;
-    for (let i = 0; i < 10; i++) {
-      engine.syncTracks([
-        { ...t, position: { x: 2 + i * 0.1, y: 0.5, z: -i * 0.2 } }
-      ]);
-    }
-    assert.ok(Math.abs(v.panner.positionX.value - 2.9) < 1e-9);
-    assert.ok(Math.abs(v.panner.positionY.value - 0.5) < 1e-9);
-    assert.ok(Math.abs(v.panner.positionZ.value - -1.8) < 1e-9);
-    assert.equal(v.source.started.length, startsBefore);
-    assert.equal(v.source.stopped, stopsBefore);
+    await engine.playTrack(other);
+    const oldSource = voice(engine, "a").source;
+    const otherSource = voice(engine, "o").source;
+    await engine.probeCandidate("a", "new", blob("2:5"));
+    const newTrack = fileTrack("a", "new", {
+      blobKey: "blob-new",
+      channels: 2,
+      duration: 5,
+      channel: 1,
+      gain: 0.6,
+      muted: true,
+      // M/S 等参数必须沿用
+      position: { x: -4, y: 1, z: 2 }
+    });
+    const meta = await engine.activateTrackVersion(newTrack, 1.5);
+    assert.equal(meta.channels, 2);
+    assert.equal(meta.duration, 5);
+    const v = voice(engine, "a");
+    assert.notEqual(v.source, oldSource);
+    assert.equal(oldSource.stopped, 1);
+    assert.equal(v.versionId, "new");
+    assert.equal(v.buffer.numberOfChannels, 2);
+    assert.equal(v.buffer.duration, 5);
+    assert.equal(v.source.started.length, 1);
+    assert.equal(v.source.started[0].offset, 1.5);
+    assert.equal(v.playing, true);
+    assert.equal(v.panner.positionX.value, -4);
+    assert.equal(v.panner.positionY.value, 1);
+    assert.equal(v.panner.positionZ.value, 2);
+    assert.equal(v.trackGain.gain.value, 0);
+    assert.equal(voice(engine, "o").source, otherSource);
+    assert.equal(voice(engine, "o").source.started.length, 1);
+    assert.equal(engine.isPlaying("o"), true);
+    assert.equal(engine.hasCandidateBuffer("a", "new"), false);
   });
-  it("\u6682\u505C\u4F1A\u505C\u6B62\u5E76\u91CD\u5EFA\u8282\u70B9\u4E14\u4FDD\u7559\u504F\u79FB\uFF1B\u518D\u6B21\u64AD\u653E\u4ECE\u504F\u79FB\u5F00\u59CB", async () => {
-    await engine.resume();
-    const ctx = engine.ctx;
-    const t = { ...baseTrack(), loop: false };
+  it("\u6682\u505C\u6001\u5207\u6362\uFF1A\u4E0D\u542F\u52A8\u64AD\u653E\uFF0C\u504F\u79FB\u88AB\u4FDD\u7559\uFF1B\u4E4B\u540E\u64AD\u653E\u4ECE\u8BE5\u504F\u79FB\u5F00\u59CB", async () => {
+    const t = fileTrack("a", "cur");
+    engine.setFileBlob("a", blob("2:4"));
+    await engine.ensureTrack({ ...t, channels: 2, duration: 4 });
+    await engine.playTrack({ ...t, channels: 2, duration: 4 });
+    engine.pauseTrack({ ...t, channels: 2, duration: 4 });
+    voice(engine, "a").offset = 2;
+    await engine.probeCandidate("a", "new", blob("2:8"));
+    const nt = fileTrack("a", "new", { channels: 2, duration: 8, blobKey: "blob-new" });
+    await engine.activateTrackVersion(nt, 2);
+    const v = voice(engine, "a");
+    assert.equal(v.playing, false);
+    assert.equal(v.source.started.length, 0);
+    assert.equal(v.offset, 2);
+    await engine.playTrack(nt);
+    assert.equal(v.source.started[v.source.started.length - 1].offset, 2);
+  });
+  it("\u56DE\u9000\u5230\u5386\u53F2\u7248\u672C\uFF08\u65E0\u5019\u9009\u7F13\u5B58\uFF09\uFF1A\u4ECE\u6CE8\u5165 Blob \u89E3\u7801\uFF0C\u65E7\u5F53\u524D source \u88AB\u539F\u5B50\u66FF\u6362", async () => {
+    const t = fileTrack("a", "new", { channels: 2, duration: 5 });
+    engine.setFileBlob("a", blob("2:5"));
+    await engine.ensureTrack(t);
+    assert.equal(voice(engine, "a").versionId, "new");
+    assert.equal(engine.hasCandidateBuffer("a", "old"), false);
+    engine.setFileBlob("a", blob("1:1"));
+    const old = fileTrack("a", "old", { channels: 1, duration: 1, blobKey: "blob-old", channel: 0 });
+    await engine.activateTrackVersion(old, 0);
+    const v = voice(engine, "a");
+    assert.equal(v.versionId, "old");
+    assert.equal(v.buffer.numberOfChannels, 1);
+    assert.equal(v.buffer.duration, 1);
+  });
+  it("\u76EE\u6807 Blob \u89E3\u7801\u5931\u8D25\u65F6\u629B DecodeError\uFF0C\u65E7 voice \u539F\u6837\u4FDD\u7559\uFF08\u5207\u6362\u4E0D\u751F\u6548\uFF09", async () => {
+    const t = fileTrack("a", "cur");
+    engine.setFileBlob("a", blob("1:1"));
+    await engine.ensureTrack(t);
     await engine.playTrack(t);
-    ctx.currentTime = 0.3;
-    engine.pauseTrack(t);
-    await engine.playTrack({ ...t });
-    const v = engine.voices.get("t1");
-    const last = v.source.started[v.source.started.length - 1];
-    assert.ok(Math.abs(last.offset - 0.3) < 1e-6);
+    const oldSource = voice(engine, "a").source;
+    engine.setFileBlob("a", blob("BAD"));
+    const bad = fileTrack("a", "broken", { blobKey: "blob-bad" });
+    await assert.rejects(engine.activateTrackVersion(bad, 0), DecodeError2);
+    const v = voice(engine, "a");
+    assert.equal(v.source, oldSource);
+    assert.equal(v.versionId, "cur");
+    assert.equal(v.playing, true);
+    assert.equal(engine.isPlaying("a"), true);
   });
-  it("\u603B\u7EBF\u4E0E\u4E3B\u589E\u76CA\u771F\u5B9E\u5199\u5165\u5BF9\u5E94 GainNode", async () => {
-    await engine.resume();
-    engine.setBusGain(0.42);
-    engine.setMasterGain(0.71);
-    const bus = engine.busGain;
-    const master = engine.masterGain;
-    assert.ok(Math.abs(bus.gain.value - 0.42) < 1e-9);
-    assert.ok(Math.abs(master.gain.value - 0.71) < 1e-9);
-    const analyser = engine.analyser;
-    const destination = engine.ctx.destination;
-    assert.ok(analyser.connects.some((c) => c.node === destination));
-  });
-  it("\u574F\u6587\u4EF6\u89E3\u7801\u5931\u8D25\u629B\u51FA DecodeError\uFF0C\u4E14\u4E0D\u5F71\u54CD\u5176\u4ED6\u58F0\u8F68", async () => {
-    await engine.resume();
-    const bad = baseTrack({ id: "bad", sourceType: "file" });
-    engine.setFileBlob("bad", new Blob([new TextEncoder().encode("BAD")], { type: "audio/x" }));
-    await assert.rejects(engine.ensureTrack(bad), (err) => err instanceof DecodeError2);
-    const good = baseTrack({ id: "good" });
-    await engine.ensureTrack(good);
-    const voices = engine.voices;
-    assert.ok(voices.has("good"));
-  });
-  it("\u5185\u7F6E\u6837\u4F8B\u7F13\u51B2\u53EF\u7ECF\u5F15\u64CE\u5408\u6210\uFF0C\u65F6\u957F\u4E0E\u58F0\u9053\u7B26\u5408\u9884\u671F", async () => {
-    await engine.resume();
-    const buf = createSampleBuffer2(engine.ctx, "pulse");
-    assert.equal(buf.numberOfChannels, 1);
-    assert.ok(Math.abs(buf.duration - 1.6) < 1e-6);
+  it("removeTrack \u6E05\u6389\u8BE5\u8F68\u5F53\u524D\u4E0E\u5168\u90E8\u5019\u9009\u7F13\u51B2\uFF0C\u4E0D\u78B0\u522B\u7684\u8F68", async () => {
+    await engine.probeCandidate("a", "c1", blob("1:1"));
+    await engine.probeCandidate("b", "c2", blob("1:1"));
+    engine.setFileBlob("a", blob("1:1"));
+    await engine.ensureTrack(fileTrack("a", "cur"));
+    const n = bufferCount(engine);
+    engine.removeTrack("a");
+    assert.equal(bufferCount(engine), n - 2);
+    assert.equal(engine.hasCandidateBuffer("b", "c2"), true);
   });
 });
