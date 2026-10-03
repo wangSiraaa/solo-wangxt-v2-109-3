@@ -413,6 +413,58 @@ registerProcessor('peak-meter', PeakMeterProcessor);
       setFileBlob(trackId, blob) {
         this.pendingFiles.set(trackId, blob);
       }
+      /**
+       * 独立解码（换版候选的浏览器内验证用）：只解码，绝不触碰任何声轨节点，
+       * 当前可试听版本在解码与兼容性检查通过前完全不受影响。
+       */
+      async decodeBlob(blob) {
+        if (!this.ctx || this.unlock !== "unlocked") {
+          throw new Error("\u97F3\u9891\u5C1A\u672A\u89E3\u9501\uFF0C\u65E0\u6CD5\u5728\u6D4F\u89C8\u5668\u5185\u89E3\u7801\u68C0\u67E5");
+        }
+        try {
+          const arr = await blob.arrayBuffer();
+          return await this.ctx.decodeAudioData(arr.slice(0));
+        } catch (err) {
+          throw new Error(
+            `\u97F3\u9891\u89E3\u7801\u5931\u8D25\uFF1A${err instanceof Error ? err.message : "\u4E0D\u652F\u6301\u7684\u7F16\u7801\u6216\u6587\u4EF6\u635F\u574F"}`
+          );
+        }
+      }
+      /**
+       * 原子换版：用已在浏览器内解码验证过的新缓冲替换该轨当前缓冲。
+       * 只重建该轨的 voice（旧 source 先停止、新 source 唯一），
+       * 其他轨与全局播放（AudioContext 时钟、其他 source）完全不受影响。
+       * 播放定位策略由用户明确选择（时长不兼容时），不在此隐式映射。
+       */
+      installTrackBuffer(track, buffer, positioning) {
+        if (!this.ctx || this.unlock !== "unlocked") return;
+        this.buffers.set(track.id, buffer);
+        const old = this.voices.get(track.id);
+        if (!old) {
+          this.voices.set(track.id, this.createVoice(track, buffer));
+          return;
+        }
+        const wasPlaying = old.playing;
+        const oldOffset = wasPlaying ? this.currentOffset(old) : old.offset;
+        const dur = buffer.duration;
+        let offset;
+        if (positioning === "restart") {
+          offset = 0;
+        } else if (positioning === "keep-ratio") {
+          offset = old.duration > 0 ? oldOffset / old.duration * dur : 0;
+        } else {
+          offset = oldOffset;
+        }
+        offset = track.loop ? (offset % dur + dur) % dur : Math.min(Math.max(0, offset), dur);
+        const nv = this.replaceVoice(old, track, buffer, offset);
+        if (wasPlaying) {
+          const startOffset = track.loop ? offset : Math.min(offset, Math.max(0, dur - 1e-4));
+          nv.source.start(this.ctx.currentTime, startOffset);
+          nv.startedAt = this.ctx.currentTime;
+          nv.playing = true;
+          nv.consumed = true;
+        }
+      }
       dropBuffer(trackId) {
         this.buffers.delete(trackId);
       }
@@ -964,5 +1016,84 @@ describe("AudioEngine \u56FE\u884C\u4E3A\uFF08\u6A21\u62DF\u73AF\u5883\uFF09", (
     const buf = createSampleBuffer2(engine.ctx, "pulse");
     assert.equal(buf.numberOfChannels, 1);
     assert.ok(Math.abs(buf.duration - 1.6) < 1e-6);
+  });
+});
+describe("\u6362\u7248\uFF1AinstallTrackBuffer \u539F\u5B50\u5207\u6362\uFF08\u9A8C\u6536\u2463\uFF09", () => {
+  let engine;
+  beforeEach(() => {
+    engine = new AudioEngine2();
+  });
+  afterEach(() => {
+    engine.dispose();
+  });
+  function voicesOf() {
+    return engine.voices;
+  }
+  it("\u64AD\u653E\u4E2D\u5207\u6362\uFF1A\u65E7 source \u505C\u6B62\u3001\u65B0 source \u552F\u4E00\u4E14\u6309 keep-time \u63A5\u7EED\uFF1B\u5176\u4ED6\u8F68\u5B8C\u5168\u4E0D\u53D7\u5F71\u54CD", async () => {
+    await engine.resume();
+    const ctx = engine.ctx;
+    const a = baseTrack({ id: "a" });
+    const b = baseTrack({ id: "b", position: { x: -2, y: 0, z: 0 } });
+    await engine.playTrack(a);
+    await engine.playTrack(b);
+    const bVoiceBefore = voicesOf().get("b");
+    const bStartsBefore = bVoiceBefore.source.started.length;
+    const bStopsBefore = bVoiceBefore.source.stopped;
+    const aOldSource = voicesOf().get("a").source;
+    ctx.currentTime = 0.4;
+    const newBuf = ctx.createBuffer(1, 48e3 * 2, 48e3);
+    engine.installTrackBuffer({ ...a }, newBuf, "keep-time");
+    const aVoice = voicesOf().get("a");
+    assert.equal(aOldSource.stopped, 1);
+    assert.notEqual(aVoice.source, aOldSource);
+    assert.equal(aVoice.source.started.length, 1);
+    assert.ok(Math.abs(aVoice.source.started[0].offset - 0.4) < 1e-6);
+    assert.equal(aVoice.playing, true);
+    const bVoiceAfter = voicesOf().get("b");
+    assert.equal(bVoiceAfter, bVoiceBefore);
+    assert.equal(bVoiceAfter.source.started.length, bStartsBefore);
+    assert.equal(bVoiceAfter.source.stopped, bStopsBefore);
+    assert.ok(Math.abs(engine.getDuration("a") - 2) < 1e-6);
+  });
+  it("restart / keep-ratio \u5B9A\u4F4D\u7B56\u7565\u6309\u7528\u6237\u660E\u786E\u9009\u62E9\u751F\u6548", async () => {
+    await engine.resume();
+    const ctx = engine.ctx;
+    const t = baseTrack({ id: "t1" });
+    await engine.playTrack(t);
+    ctx.currentTime = 0.6;
+    const newBuf = ctx.createBuffer(1, 48e3 * 4, 48e3);
+    engine.installTrackBuffer({ ...t }, newBuf, "keep-ratio");
+    let v = voicesOf().get("t1");
+    assert.ok(Math.abs(v.source.started.at(-1).offset - 0.8) < 1e-6);
+    ctx.currentTime = 1;
+    engine.installTrackBuffer({ ...t }, newBuf, "restart");
+    v = voicesOf().get("t1");
+    assert.ok(Math.abs(v.source.started.at(-1).offset - 0) < 1e-6);
+  });
+  it("\u672A\u64AD\u653E\u65F6\u5207\u6362\uFF1A\u4E0D\u4EA7\u751F\u4EFB\u4F55\u65B0 source \u8D77\u70B9\uFF0C\u504F\u79FB\u6309\u7B56\u7565\u8BB0\u5F55", async () => {
+    await engine.resume();
+    const ctx = engine.ctx;
+    const t = baseTrack({ id: "t1" });
+    await engine.ensureTrack(t);
+    const newBuf = ctx.createBuffer(1, 48e3 * 2, 48e3);
+    engine.installTrackBuffer({ ...t }, newBuf, "restart");
+    const v = voicesOf().get("t1");
+    assert.equal(v.source.started.length, 0);
+    assert.equal(v.playing, false);
+    assert.ok(Math.abs(engine.getDuration("t1") - 2) < 1e-6);
+  });
+  it("decodeBlob \u72EC\u7ACB\u89E3\u7801\uFF1A\u574F\u6587\u4EF6\u62D2\u7EDD\u3001\u597D\u6587\u4EF6\u901A\u8FC7\uFF0C\u5747\u4E0D\u89E6\u78B0\u58F0\u8F68", async () => {
+    await engine.resume();
+    const t = baseTrack({ id: "good" });
+    await engine.ensureTrack(t);
+    await assert.rejects(
+      engine.decodeBlob(new Blob([new TextEncoder().encode("BAD")], { type: "audio/x" })),
+      /解码失败/
+    );
+    const ok = await engine.decodeBlob(
+      new Blob([new TextEncoder().encode("OK")], { type: "audio/x" })
+    );
+    assert.ok(ok.duration > 0);
+    assert.ok(Math.abs(engine.getDuration("good") - 3) < 1e-6);
   });
 });

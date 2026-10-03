@@ -362,3 +362,110 @@ describe('AudioEngine 图行为（模拟环境）', () => {
     assert.ok(Math.abs(buf.duration - 1.6) < 1e-6);
   });
 });
+
+describe('换版：installTrackBuffer 原子切换（验收④）', () => {
+  let engine: InstanceType<typeof AudioEngine>;
+
+  beforeEach(() => {
+    engine = new AudioEngine();
+  });
+
+  afterEach(() => {
+    engine.dispose();
+  });
+
+  function voicesOf() {
+    return (engine as unknown as {
+      voices: Map<
+        string,
+        {
+          source: FakeBufferSource;
+          offset: number;
+          playing: boolean;
+          duration: number;
+        }
+      >;
+    }).voices;
+  }
+
+  it('播放中切换：旧 source 停止、新 source 唯一且按 keep-time 接续；其他轨完全不受影响', async () => {
+    await engine.resume();
+    const ctx = engine.ctx as unknown as FakeAudioContext;
+    const a = baseTrack({ id: 'a' });
+    const b = baseTrack({ id: 'b', position: { x: -2, y: 0, z: 0 } });
+    await engine.playTrack(a);
+    await engine.playTrack(b);
+    const bVoiceBefore = voicesOf().get('b')!;
+    const bStartsBefore = bVoiceBefore.source.started.length;
+    const bStopsBefore = bVoiceBefore.source.stopped;
+    const aOldSource = voicesOf().get('a')!.source;
+
+    ctx.currentTime = 0.4;
+    const newBuf = ctx.createBuffer(1, 48000 * 2, 48000) as unknown as AudioBuffer; // 2s
+    engine.installTrackBuffer({ ...a }, newBuf, 'keep-time');
+
+    const aVoice = voicesOf().get('a')!;
+    // 旧 source 已停止，且不会再被 start
+    assert.equal(aOldSource.stopped, 1);
+    // 新 source 是唯一的新起点，从 0.4s 处接续
+    assert.notEqual(aVoice.source, aOldSource);
+    assert.equal(aVoice.source.started.length, 1);
+    assert.ok(Math.abs(aVoice.source.started[0].offset - 0.4) < 1e-6);
+    assert.equal(aVoice.playing, true);
+    // 其他轨纹丝不动：同一个 source，没有额外的 start/stop
+    const bVoiceAfter = voicesOf().get('b')!;
+    assert.equal(bVoiceAfter, bVoiceBefore);
+    assert.equal(bVoiceAfter.source.started.length, bStartsBefore);
+    assert.equal(bVoiceAfter.source.stopped, bStopsBefore);
+    // 新缓冲已成为该轨当前缓冲
+    assert.ok(Math.abs(engine.getDuration('a')! - 2) < 1e-6);
+  });
+
+  it('restart / keep-ratio 定位策略按用户明确选择生效', async () => {
+    await engine.resume();
+    const ctx = engine.ctx as unknown as FakeAudioContext;
+    const t = baseTrack({ id: 't1' }); // tone 样例，原缓冲 3s
+    await engine.playTrack(t);
+    ctx.currentTime = 0.6; // 原进度 0.6s / 3s = 20%
+
+    const newBuf = ctx.createBuffer(1, 48000 * 4, 48000) as unknown as AudioBuffer; // 4s
+    engine.installTrackBuffer({ ...t }, newBuf, 'keep-ratio');
+    let v = voicesOf().get('t1')!;
+    // 20% × 4s = 0.8s
+    assert.ok(Math.abs(v.source.started.at(-1)!.offset - 0.8) < 1e-6);
+
+    ctx.currentTime = 1.0;
+    engine.installTrackBuffer({ ...t }, newBuf, 'restart');
+    v = voicesOf().get('t1')!;
+    assert.ok(Math.abs(v.source.started.at(-1)!.offset - 0) < 1e-6);
+  });
+
+  it('未播放时切换：不产生任何新 source 起点，偏移按策略记录', async () => {
+    await engine.resume();
+    const ctx = engine.ctx as unknown as FakeAudioContext;
+    const t = baseTrack({ id: 't1' });
+    await engine.ensureTrack(t);
+    const newBuf = ctx.createBuffer(1, 48000 * 2, 48000) as unknown as AudioBuffer;
+    engine.installTrackBuffer({ ...t }, newBuf, 'restart');
+    const v = voicesOf().get('t1')!;
+    assert.equal(v.source.started.length, 0);
+    assert.equal(v.playing, false);
+    assert.ok(Math.abs(engine.getDuration('t1')! - 2) < 1e-6);
+  });
+
+  it('decodeBlob 独立解码：坏文件拒绝、好文件通过，均不触碰声轨', async () => {
+    await engine.resume();
+    const t = baseTrack({ id: 'good' });
+    await engine.ensureTrack(t);
+    await assert.rejects(
+      engine.decodeBlob(new Blob([new TextEncoder().encode('BAD')], { type: 'audio/x' })),
+      /解码失败/,
+    );
+    const ok = await engine.decodeBlob(
+      new Blob([new TextEncoder().encode('OK')], { type: 'audio/x' }),
+    );
+    assert.ok(ok.duration > 0);
+    // 既有声轨的缓冲未被替换（tone 样例为 3s）
+    assert.ok(Math.abs(engine.getDuration('good')! - 3) < 1e-6);
+  });
+});

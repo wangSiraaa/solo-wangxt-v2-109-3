@@ -8,6 +8,7 @@ import { ListenerPanel } from './components/ListenerPanel';
 import { SpatialPanel } from './components/SpatialPanel';
 import { MasterBar } from './components/MasterBar';
 import { ProjectBar } from './components/ProjectBar';
+import { ReplaceDialog } from './components/ReplaceDialog';
 import { UnlockOverlay } from './components/UnlockOverlay';
 import type { Vec3 } from './types';
 
@@ -111,6 +112,7 @@ export default function App() {
           </button>
         </div>
       )}
+      <ReplaceDialog api={api} />
       <UnlockOverlay api={api} />
     </div>
   );

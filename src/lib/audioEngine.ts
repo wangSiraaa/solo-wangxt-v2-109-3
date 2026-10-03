@@ -22,6 +22,7 @@ import type {
   LevelState,
   ListenerState,
   SpatialSettings,
+  SwitchPositioning,
   Track,
   UnlockState,
 } from '../types';
@@ -354,6 +355,61 @@ registerProcessor('peak-meter', PeakMeterProcessor);
   /** 文件 Blob 在解锁后由 UI 层提供（来自 IndexedDB，全程本地） */
   setFileBlob(trackId: string, blob: Blob) {
     this.pendingFiles.set(trackId, blob);
+  }
+
+  /**
+   * 独立解码（换版候选的浏览器内验证用）：只解码，绝不触碰任何声轨节点，
+   * 当前可试听版本在解码与兼容性检查通过前完全不受影响。
+   */
+  async decodeBlob(blob: Blob): Promise<AudioBuffer> {
+    if (!this.ctx || this.unlock !== 'unlocked') {
+      throw new Error('音频尚未解锁，无法在浏览器内解码检查');
+    }
+    try {
+      const arr = await blob.arrayBuffer();
+      // slice(0)：decodeAudioData 会 detach ArrayBuffer，保留原始 Blob 不受影响
+      return await this.ctx.decodeAudioData(arr.slice(0));
+    } catch (err) {
+      throw new Error(
+        `音频解码失败：${err instanceof Error ? err.message : '不支持的编码或文件损坏'}`,
+      );
+    }
+  }
+
+  /**
+   * 原子换版：用已在浏览器内解码验证过的新缓冲替换该轨当前缓冲。
+   * 只重建该轨的 voice（旧 source 先停止、新 source 唯一），
+   * 其他轨与全局播放（AudioContext 时钟、其他 source）完全不受影响。
+   * 播放定位策略由用户明确选择（时长不兼容时），不在此隐式映射。
+   */
+  installTrackBuffer(track: Track, buffer: AudioBuffer, positioning: SwitchPositioning): void {
+    if (!this.ctx || this.unlock !== 'unlocked') return;
+    this.buffers.set(track.id, buffer);
+    const old = this.voices.get(track.id);
+    if (!old) {
+      this.voices.set(track.id, this.createVoice(track, buffer));
+      return;
+    }
+    const wasPlaying = old.playing;
+    const oldOffset = wasPlaying ? this.currentOffset(old) : old.offset;
+    const dur = buffer.duration;
+    let offset: number;
+    if (positioning === 'restart') {
+      offset = 0;
+    } else if (positioning === 'keep-ratio') {
+      offset = old.duration > 0 ? (oldOffset / old.duration) * dur : 0;
+    } else {
+      offset = oldOffset;
+    }
+    offset = track.loop ? ((offset % dur) + dur) % dur : Math.min(Math.max(0, offset), dur);
+    const nv = this.replaceVoice(old, track, buffer, offset);
+    if (wasPlaying) {
+      const startOffset = track.loop ? offset : Math.min(offset, Math.max(0, dur - 1e-4));
+      nv.source.start(this.ctx.currentTime, startOffset);
+      nv.startedAt = this.ctx.currentTime;
+      nv.playing = true;
+      nv.consumed = true;
+    }
   }
 
   dropBuffer(trackId: string) {

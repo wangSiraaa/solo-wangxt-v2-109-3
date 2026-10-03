@@ -178,6 +178,40 @@ export function TrackRow({ track, api }: Props) {
           ))}
         </div>
       ) : null}
+
+      {track.sourceType === 'file' && (
+        <div className="track-asset">
+          <label className={`btn mini ${api.replaceBusy.has(track.id) ? 'disabled' : ''}`}>
+            ⇄ 换版…
+            <input
+              type="file"
+              accept="audio/*"
+              hidden
+              disabled={api.replaceBusy.has(track.id)}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void api.submitReplacement(track.id, f);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {api.replaceBusy.has(track.id) && <span className="asset-badge busy">解码检查中…</span>}
+          {api.doc.assets.some((a) => a.trackId === track.id && a.status === 'candidate') && (
+            <button
+              className="asset-badge candidate"
+              onClick={() => api.openCandidateDialog(track.id)}
+              title="有候选版本等待确认"
+            >
+              候选待确认
+            </button>
+          )}
+          {api.doc.assets.some((a) => a.trackId === track.id && a.status === 'failed') && (
+            <span className="asset-badge failed" title="存在失败的换版候选，详见右侧来源链">
+              有失败候选
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

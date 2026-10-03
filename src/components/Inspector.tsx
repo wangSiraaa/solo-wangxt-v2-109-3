@@ -1,5 +1,6 @@
 import type { Vec3 } from '../types';
 import type { WorkbenchApi } from '../state/useWorkbench';
+import { VersionChain } from './VersionChain';
 
 function NumberField({
   label,
@@ -64,6 +65,7 @@ export function Inspector({ api }: { api: WorkbenchApi }) {
           onChange={(e) => api.updateTrack(track.id, { name: e.target.value })}
         />
       </label>
+      <VersionChain api={api} track={track} />
     </div>
   );
 }
